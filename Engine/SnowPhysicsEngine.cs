@@ -26,10 +26,12 @@ public class SnowPhysicsEngine
     private float _windOffset;
     private float _time;
     private float _idleSeconds;
-    private float _santaTimer = 10f;
+    private float _santaLeftTimer = 6f;
+    private float _santaRightTimer = 18f;
 
     public AppSettings Settings { get; }
-    public SantaSleigh Santa { get; } = new();
+    public SantaSleigh SantaLeftToRight { get; } = new() { Direction = 1 };
+    public SantaSleigh SantaRightToLeft { get; } = new() { Direction = -1 };
     public SnowplowTruck PlowTruck { get; } = new();
     public bool IsPausedByFullscreen { get; set; }
 
@@ -128,13 +130,23 @@ public class SnowPhysicsEngine
 
     public void TriggerSantaFlyby()
     {
-        Santa.IsActive = true;
-        Santa.Direction = _rng.Next(2) == 0 ? 1 : -1;
-        Santa.X = Santa.Direction == 1 ? -160f : ScreenWidth + 160f;
-        Santa.Y = Math.Clamp(ScreenHeight * (float)(_rng.NextDouble() * 0.14 + 0.08), 70f, 200f);
-        Santa.SpeedX = 185f * Santa.Direction;
-        Santa.WavePhase = 0f;
-        Santa.Trail.Clear();
+        if (!SantaLeftToRight.IsActive)
+            LaunchSleigh(SantaLeftToRight, 1);
+        else if (!SantaRightToLeft.IsActive)
+            LaunchSleigh(SantaRightToLeft, -1);
+    }
+
+    private void LaunchSleigh(SantaSleigh sleigh, int direction)
+    {
+        sleigh.IsActive = true;
+        sleigh.Direction = direction;
+        sleigh.X = direction == 1 ? -160f : ScreenWidth + 160f;
+        sleigh.Y = direction == 1
+            ? Math.Clamp(ScreenHeight * 0.11f, 65f, 150f)
+            : Math.Clamp(ScreenHeight * 0.21f, 130f, 240f);
+        sleigh.SpeedX = 185f * direction;
+        sleigh.WavePhase = 0f;
+        sleigh.Trail.Clear();
     }
 
     private Snowflake CreateFlake(bool randomY) => new()
@@ -148,24 +160,26 @@ public class SnowPhysicsEngine
         Opacity = (float)(_rng.NextDouble() * 0.4 + 0.6)
     };
 
-    private void DropWindowSnowAndIcicles(WindowSurface surface, bool dropIciclesOnly = false)
+    private void DropWindowSnowAndIcicles(WindowSurface surface, bool dropIciclesOnly = false, float shedRatio = 1.0f)
     {
         for (int i = 0; i < surface.SnowHeights.Length; i += 2)
         {
             float wx = surface.Bounds.Left + i * WindowSurface.BucketSize;
 
-            if (!dropIciclesOnly && surface.SnowHeights[i] > 2.0f)
+            if (!dropIciclesOnly && surface.SnowHeights[i] > 1.8f && _rng.NextDouble() <= shedRatio)
             {
+                float dropAmount = surface.SnowHeights[i] * shedRatio;
                 _particles.Add(new Snowflake
                 {
                     X = wx,
-                    Y = surface.Bounds.Top - surface.SnowHeights[i] * 0.4f,
-                    Radius = Math.Clamp(surface.SnowHeights[i] * 0.25f, 2.2f, 5.2f),
-                    DriftPhase = (float)(_rng.NextDouble() * 50 - 25),
-                    SpeedY = (float)(_rng.NextDouble() * 65 + 25),
+                    Y = surface.Bounds.Top - surface.SnowHeights[i] * 0.3f,
+                    Radius = Math.Clamp(dropAmount * 0.32f, 2.2f, 5.2f),
+                    DriftPhase = (float)(_rng.NextDouble() * 60 - 30),
+                    SpeedY = (float)(_rng.NextDouble() * 70 + 25),
                     Opacity = 1.0f,
-                    DriftSpeed = 1f
+                    DriftSpeed = 1f // Yere inince zemindeki kar yığınına eklensin
                 });
+                surface.SnowHeights[i] = Math.Max(0f, surface.SnowHeights[i] - dropAmount);
             }
 
             if (i < surface.IcicleLengths.Length && surface.IcicleLengths[i] > 4f)
@@ -183,8 +197,6 @@ public class SnowPhysicsEngine
                 surface.IcicleLengths[i] = 0f;
             }
         }
-
-        if (!dropIciclesOnly) Array.Clear(surface.SnowHeights, 0, surface.SnowHeights.Length);
     }
 
     public void UpdateWindows(IntPtr overlayHwnd)
@@ -211,19 +223,20 @@ public class SnowPhysicsEngine
                 surface.UpdateBounds(bounds, out float delta, out bool isShaken);
                 if (isShaken)
                 {
-                    DropWindowSnowAndIcicles(surface, dropIciclesOnly: false);
+                    DropWindowSnowAndIcicles(surface, dropIciclesOnly: false, shedRatio: 1.0f);
                 }
-                else if (delta > 6f)
+                else if (delta > 3f)
                 {
-                    DropWindowSnowAndIcicles(surface, dropIciclesOnly: true);
-                    surface.ShedSnow(delta * 0.25f);
+                    // Pencere hareket ettirildiğinde üstündeki karlar ve sarkıtlar gerçek parçacık olarak yere dökülür
+                    DropWindowSnowAndIcicles(surface, dropIciclesOnly: false, shedRatio: Math.Clamp(delta * 0.035f, 0.15f, 0.65f));
                 }
             }
             else
             {
                 var newSurface = new WindowSurface(hwnd, bounds);
+                // Yeni açılan veya öne getirilen sekmenin üstünde daha dolgun başlangıç karı oluşsun
                 for (int i = 1; i < newSurface.SnowHeights.Length - 1; i++)
-                    newSurface.SnowHeights[i] = 4.5f * newSurface.OrganicMultiplier[i];
+                    newSurface.SnowHeights[i] = 7.5f * newSurface.OrganicMultiplier[i];
 
                 if (bounds.Width > 320 && _rng.NextDouble() < 0.75)
                 {
@@ -239,7 +252,7 @@ public class SnowPhysicsEngine
         var removed = _surfaces.Keys.Where(k => !activeHandles.Contains(k)).ToList();
         foreach (var key in removed)
         {
-            DropWindowSnowAndIcicles(_surfaces[key], dropIciclesOnly: false);
+            DropWindowSnowAndIcicles(_surfaces[key], dropIciclesOnly: false, shedRatio: 1.0f);
             _surfaces.Remove(key);
         }
     }
@@ -251,7 +264,8 @@ public class SnowPhysicsEngine
         _time += dt;
         _windOffset = MathF.Sin(_time * 0.4f) * 18f;
 
-        UpdateSanta(dt);
+        UpdateSingleSanta(SantaLeftToRight, ref _santaLeftTimer, 1, dt);
+        UpdateSingleSanta(SantaRightToLeft, ref _santaRightTimer, -1, dt);
         UpdateSnowplow(dt);
 
         if (!PlowTruck.IsActive && _activeSnowball == null && _floorSnow.Length > 0 &&
@@ -309,10 +323,18 @@ public class SnowPhysicsEngine
                 {
                     int bucket = Math.Clamp((int)((flake.X - surface.Bounds.Left) / WindowSurface.BucketSize), 0, surface.SnowHeights.Length - 1);
                     float maxDepthHere = WindowSurface.MaxSnowDepth * surface.OrganicMultiplier[bucket];
-                    if (flake.Y >= surface.Bounds.Top - surface.SnowHeights[bucket] * 0.4f && flake.Y <= surface.Bounds.Top + 16f)
+                    if (flake.Y >= surface.Bounds.Top - surface.SnowHeights[bucket] * 0.45f && flake.Y <= surface.Bounds.Top + 18f)
                     {
                         if (surface.SnowHeights[bucket] < maxDepthHere)
-                            surface.SnowHeights[bucket] += flake.Radius * 0.65f * surface.OrganicMultiplier[bucket];
+                        {
+                            // Pencere üstünde kar daha hızlı ve dolgun biriksin
+                            for (int k = -1; k <= 1; k++)
+                            {
+                                int bIdx = bucket + k;
+                                if (bIdx >= 0 && bIdx < surface.SnowHeights.Length)
+                                    surface.SnowHeights[bIdx] = Math.Min(maxDepthHere, surface.SnowHeights[bIdx] + flake.Radius * 0.75f * surface.OrganicMultiplier[bIdx]);
+                            }
+                        }
                         landed = true;
                         break;
                     }
@@ -361,6 +383,43 @@ public class SnowPhysicsEngine
 
         foreach (var snowman in _snowmen) snowman.WobblePhase += dt * 2.5f;
         foreach (var cookie in _cookies) cookie.WavePhase += dt * 3.2f;
+    }
+
+    private void UpdateSingleSanta(SantaSleigh sleigh, ref float timer, int direction, float dt)
+    {
+        if (!Settings.ShowSanta) { sleigh.IsActive = false; return; }
+        if (!sleigh.IsActive)
+        {
+            timer -= dt;
+            if (timer <= 0f)
+            {
+                LaunchSleigh(sleigh, direction);
+                timer = _rng.Next(24, 48);
+            }
+            return;
+        }
+
+        sleigh.WavePhase += dt * 3.2f;
+        sleigh.X += sleigh.SpeedX * dt;
+        sleigh.Y += MathF.Sin(sleigh.WavePhase) * 14f * dt;
+
+        for (int i = 0; i < 2; i++)
+            sleigh.Trail.Add((sleigh.X - (35f * direction) + (float)(_rng.NextDouble() * 14 - 7), sleigh.Y + (float)(_rng.NextDouble() * 12 - 6), 1.0f, 2.2f));
+
+        for (int i = sleigh.Trail.Count - 1; i >= 0; i--)
+        {
+            var p = sleigh.Trail[i];
+            float nextAlpha = p.Alpha - dt * 0.85f;
+            if (nextAlpha <= 0f) sleigh.Trail.RemoveAt(i);
+            else sleigh.Trail[i] = (p.X - (15f * direction) * dt, p.Y + 8f * dt, nextAlpha, p.Size);
+        }
+
+        if ((direction == 1 && sleigh.X > ScreenWidth + 240f) ||
+            (direction == -1 && sleigh.X < -240f))
+        {
+            sleigh.IsActive = false;
+            sleigh.Trail.Clear();
+        }
     }
 
     private void UpdateCursorAndIdleSnowman(int mx, int my, float mouseSpeed, float dt)
@@ -476,39 +535,6 @@ public class SnowPhysicsEngine
         }
     }
 
-    private void UpdateSanta(float dt)
-    {
-        if (!Settings.ShowSanta) { Santa.IsActive = false; return; }
-        if (!Santa.IsActive)
-        {
-            _santaTimer -= dt;
-            if (_santaTimer <= 0f) { TriggerSantaFlyby(); _santaTimer = _rng.Next(20, 40); }
-            return;
-        }
-
-        Santa.WavePhase += dt * 3.2f;
-        Santa.X += Santa.SpeedX * dt;
-        Santa.Y += MathF.Sin(Santa.WavePhase) * 14f * dt;
-
-        for (int i = 0; i < 2; i++)
-            Santa.Trail.Add((Santa.X - (35f * Santa.Direction) + (float)(_rng.NextDouble() * 14 - 7), Santa.Y + (float)(_rng.NextDouble() * 12 - 6), 1.0f, 2.2f));
-
-        for (int i = Santa.Trail.Count - 1; i >= 0; i--)
-        {
-            var p = Santa.Trail[i];
-            float nextAlpha = p.Alpha - dt * 0.85f;
-            if (nextAlpha <= 0f) Santa.Trail.RemoveAt(i);
-            else Santa.Trail[i] = (p.X - (15f * Santa.Direction) * dt, p.Y + 8f * dt, nextAlpha, p.Size);
-        }
-
-        if ((Santa.Direction == 1 && Santa.X > ScreenWidth + 240f) ||
-            (Santa.Direction == -1 && Santa.X < -240f))
-        {
-            Santa.IsActive = false;
-            Santa.Trail.Clear();
-        }
-    }
-
     private void UpdateThrownSnowballs(float dt)
     {
         for (int i = _snowballs.Count - 1; i >= 0; i--)
@@ -568,7 +594,6 @@ public class SnowPhysicsEngine
         targetTopBall = null;
         stackCount = 0;
 
-        // Çok küçük (yuvarlanmamış) toplar üst üste dizilemez
         if (activeBall.Radius < MinStackableRadius) return false;
 
         var nearbyBalls = _snowballs.Where(b => !b.IsThrown && MathF.Abs(b.X - activeBall.X) < 32f).OrderBy(b => b.Y).ToList();
@@ -584,16 +609,12 @@ public class SnowPhysicsEngine
     {
         if (isShiftHeld)
         {
-            if (!_wasShiftHeld)
-            {
-                _shiftDragDistance = 0f;
-            }
+            if (!_wasShiftHeld) _shiftDragDistance = 0f;
             _wasShiftHeld = true;
             _shiftDragDistance += mouseSpeed;
 
             if (_activeSnowball == null)
             {
-                // 1. Önce mevcut bir kartopunu tutmaya çalış
                 var existing = _snowballs.Where(b => !b.IsThrown).OrderBy(b => b.Y)
                     .FirstOrDefault(b => MathF.Sqrt((b.X - mouseX) * (b.X - mouseX) + (b.Y - mouseY) * (b.Y - mouseY)) <= b.Radius + 14f);
 
@@ -603,7 +624,6 @@ public class SnowPhysicsEngine
                     _activeSnowball = existing;
                     _activeSnowball.IsHeld = true;
                 }
-                // 2. Yeni kartopu oluşturmak için sadece Shift'e basmak yetmez; fareyi en az 14px yuvarlamak gerekir!
                 else if (_shiftDragDistance >= 14f && mouseY >= GroundY - 100f)
                 {
                     int bucket = Math.Clamp(mouseX / WindowSurface.BucketSize, 0, _floorSnow.Length - 1);
@@ -746,5 +766,3 @@ public class SnowPhysicsEngine
         });
     }
 }
-
-

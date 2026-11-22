@@ -84,7 +84,7 @@ public partial class OverlayWindow : Window
 
         float timeSec = (float)_stopwatch.Elapsed.TotalSeconds;
 
-        if (Engine.Santa.IsActive) DrawSantaAndReindeer(canvas, Engine.Santa);
+        if (Engine.SantaLeftToRight.IsActive) DrawSantaAndReindeer(canvas, Engine.SantaLeftToRight); if (Engine.SantaRightToLeft.IsActive) DrawSantaAndReindeer(canvas, Engine.SantaRightToLeft);
 
         foreach (var surface in Engine.Surfaces)
         {
@@ -566,4 +566,5 @@ public partial class OverlayWindow : Window
         }
     }
 }
+
 
