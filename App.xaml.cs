@@ -71,7 +71,8 @@ public partial class App : Application
 
         var callSantaItem = new ToolStripMenuItem("Noel Baba'yı Şimdi Çağır", null, (_, _) => _overlay?.Engine.TriggerSantaFlyby());
         var spawnSnowmanItem = new ToolStripMenuItem("Kardan Adam Ekle", null, (_, _) => _overlay?.Engine.SpawnSnowmanAtRandom());
-        var clearItem = new ToolStripMenuItem("Biriken Karları Temizle", null, (_, _) => _overlay?.Engine.ClearAllSnow());
+        var styleSnowmanItem = new ToolStripMenuItem("Kardan Adam Aksesuarlarını Değiştir", null, (_, _) => _overlay?.Engine.CycleSnowmanStyle());
+        var clearItem = new ToolStripMenuItem("Kar Küreme Aracıyla Temizle", null, (_, _) => _overlay?.Engine.StartSnowplowClear());
 
         var startupToggle = new ToolStripMenuItem("Windows Başlangıcında Çalıştır") { Checked = IsStartupEnabled() };
         startupToggle.Click += (_, _) =>
@@ -91,6 +92,7 @@ public partial class App : Application
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(callSantaItem);
         menu.Items.Add(spawnSnowmanItem);
+        menu.Items.Add(styleSnowmanItem);
         menu.Items.Add(clearItem);
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(startupToggle);

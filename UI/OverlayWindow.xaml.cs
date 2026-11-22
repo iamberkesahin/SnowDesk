@@ -27,14 +27,15 @@ public partial class OverlayWindow : Window
     private readonly SKPaint _scarfMain = new() { Color = new SKColor(210, 42, 52), IsAntialias = true };
     private readonly SKPaint _scarfStripe = new() { Color = new SKColor(245, 215, 110), IsAntialias = true };
     private readonly SKPaint _branchPaint = new() { Color = new SKColor(92, 58, 33), IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 2.6f, StrokeCap = SKStrokeCap.Round };
-    private readonly SKPaint _wirePaint = new() { Color = new SKColor(45, 55, 48, 190), IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.4f };
+    private readonly SKPaint _wirePaint = new() { Color = new SKColor(45, 55, 48, 200), IsAntialias = true, Style = SKPaintStyle.Stroke, StrokeWidth = 1.4f };
 
     private static readonly SKColor[] BulbColors =
     {
-        new(255, 85, 85),
-        new(255, 210, 75),
-        new(80, 225, 130),
-        new(95, 195, 255)
+        new(255, 195, 65),  // Sıcak Kehribar/Altın
+        new(255, 75, 75),   // Sıcak Kırmızı
+        new(255, 225, 115), // Yumuşak Sarı
+        new(75, 220, 125),  // Zümrüt Yeşili
+        new(85, 190, 255)   // Buz Mavisi
     };
 
     public OverlayWindow(AppSettings settings)
@@ -92,11 +93,13 @@ public partial class OverlayWindow : Window
 
         float timeSec = (float)_stopwatch.Elapsed.TotalSeconds;
 
+        // 1. Gökyüzünde uçan Noel Baba ve Ren Geyikleri
         if (Engine.Santa.IsActive)
         {
             DrawSantaAndReindeer(canvas, Engine.Santa);
         }
 
+        // 2. Açık pencerelerin üstündeki ağaçlar, yoğun sıcak peri ışıkları ve kar yığınları
         foreach (var surface in Engine.Surfaces)
         {
             if (_settings.ShowStringLights)
@@ -115,6 +118,12 @@ public partial class OverlayWindow : Window
             DrawSnowMound(canvas, surface.Bounds.Left, surface.Bounds.Top + 2, surface.SnowHeights);
         }
 
+        // 3. Hediye paketleri, Aksesuarlı/Işıklı Kardan Adamlar ve Kurabiye Adamlar
+        foreach (var gift in Engine.GiftBoxes)
+        {
+            DrawGiftBox(canvas, gift.X, Engine.GroundY, gift.W, gift.H, gift.ColorIdx);
+        }
+
         foreach (var snowman in Engine.Snowmen)
         {
             DrawSnowman(canvas, snowman, timeSec);
@@ -125,12 +134,12 @@ public partial class OverlayWindow : Window
             DrawGingerbreadMan(canvas, cookie);
         }
 
+        // 4. Kartopları ve Parçalanma / Çığ Parçacıkları
         foreach (var ball in Engine.Snowballs)
         {
             DrawSnowball(canvas, ball);
         }
 
-        // Parçalanan kartopu parçacıklarını çiz
         foreach (var part in Engine.SplatParticles)
         {
             _snowPaint.Color = SKColors.White.WithAlpha((byte)(Math.Clamp(part.Opacity, 0f, 1f) * 255));
@@ -155,8 +164,21 @@ public partial class OverlayWindow : Window
             DrawSnowball(canvas, Engine.ActiveSnowball);
         }
 
+        // 5. Zemin kar yığını + Alt kenar sıcak ışık şeridi
         DrawSnowMound(canvas, 0, Engine.GroundY, Engine.FloorSnow);
 
+        if (_settings.ShowStringLights)
+        {
+            DrawBottomWarmGlowLights(canvas, timeSec);
+        }
+
+        // 6. Kar Küreme Kamyonu (Snowplow Truck)
+        if (Engine.PlowTruck.IsActive)
+        {
+            DrawSnowplowTruck(canvas, Engine.PlowTruck, timeSec);
+        }
+
+        // 7. Yağan kar taneleri
         foreach (var flake in Engine.Flakes)
         {
             _snowPaint.Color = SKColors.White.WithAlpha((byte)(flake.Opacity * 255));
@@ -166,41 +188,138 @@ public partial class OverlayWindow : Window
 
     private void DrawStringLights(SKCanvas canvas, float startX, float topY, float width, float time)
     {
-        if (width < 80) return;
+        if (width < 60) return;
 
-        float spacing = 26f;
+        // Daha sık ve daha parlak çift katmanlı peri ışıkları
+        float spacing = 18f;
         int bulbCount = (int)(width / spacing);
         using var wirePath = new SKPath();
-        wirePath.MoveTo(startX + 6, topY + 2);
+        wirePath.MoveTo(startX + 4, topY + 2);
 
         for (int i = 0; i < bulbCount; i++)
         {
-            float x1 = startX + 6 + i * spacing;
-            float x2 = Math.Min(startX + width - 6, x1 + spacing);
+            float x1 = startX + 4 + i * spacing;
+            float x2 = Math.Min(startX + width - 4, x1 + spacing);
             float midX = (x1 + x2) * 0.5f;
-            wirePath.QuadTo(midX, topY + 9f, x2, topY + 2f);
+            wirePath.QuadTo(midX, topY + 10f, x2, topY + 2f);
         }
         canvas.DrawPath(wirePath, _wirePaint);
 
-        using var glowPaint = new SKPaint { IsAntialias = true, MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, 4.5f) };
+        using var outerGlow = new SKPaint { IsAntialias = true, MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, 7.5f) };
         using var bulbPaint = new SKPaint { IsAntialias = true };
 
         for (int i = 0; i < bulbCount; i++)
         {
-            float bx = startX + 6 + (i + 0.5f) * spacing;
-            if (bx > startX + width - 10) break;
-            float by = topY + 7.5f;
+            float bx = startX + 4 + (i + 0.5f) * spacing;
+            if (bx > startX + width - 8) break;
+            float by = topY + 8.5f;
 
             var baseColor = BulbColors[i % BulbColors.Length];
-            float pulse = 0.65f + 0.35f * MathF.Sin(time * 3.5f + i * 1.1f);
-            byte alpha = (byte)(pulse * 255);
+            float pulse = 0.72f + 0.28f * MathF.Sin(time * 3.8f + i * 1.15f);
 
-            glowPaint.Color = baseColor.WithAlpha((byte)(pulse * 130));
-            canvas.DrawCircle(bx, by, 6.5f, glowPaint);
+            // Geniş sıcak ışık halesi
+            outerGlow.Color = baseColor.WithAlpha((byte)(pulse * 170));
+            canvas.DrawCircle(bx, by, 9.5f, outerGlow);
 
-            bulbPaint.Color = baseColor.WithAlpha(alpha);
-            canvas.DrawOval(bx, by, 2.3f, 3.4f, bulbPaint);
+            // Ampul gövdesi ve parlak beyaz çekirdek
+            bulbPaint.Color = baseColor.WithAlpha((byte)(pulse * 255));
+            canvas.DrawOval(bx, by, 2.5f, 3.8f, bulbPaint);
+            canvas.DrawCircle(bx, by - 0.5f, 1.1f, _snowPaint);
         }
+    }
+
+    private void DrawBottomWarmGlowLights(SKCanvas canvas, float time)
+    {
+        // Sağ alt köşedeki kardan adam ve hediye kutularının etrafına sıcak zemin ışıkları
+        float startX = Math.Max(20f, Engine.ScreenWidth - 330f);
+        float endX = Engine.ScreenWidth - 20f;
+        float spacing = 22f;
+
+        using var outerGlow = new SKPaint { IsAntialias = true, MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, 8f) };
+        using var bulbPaint = new SKPaint { IsAntialias = true };
+
+        int idx = 0;
+        for (float x = startX; x < endX; x += spacing)
+        {
+            float y = Engine.GroundY - 3f + MathF.Sin(idx * 0.9f) * 2.5f;
+            var color = BulbColors[idx % BulbColors.Length];
+            float pulse = 0.7f + 0.3f * MathF.Sin(time * 3.2f + idx);
+
+            outerGlow.Color = color.WithAlpha((byte)(pulse * 165));
+            canvas.DrawCircle(x, y, 9f, outerGlow);
+
+            bulbPaint.Color = color.WithAlpha(255);
+            canvas.DrawCircle(x, y, 2.4f, bulbPaint);
+            idx++;
+        }
+    }
+
+    private void DrawGiftBox(SKCanvas canvas, float x, float baseY, float w, float h, int colorIdx)
+    {
+        var boxColor = colorIdx == 0 ? new SKColor(210, 40, 50) : new SKColor(38, 145, 78);
+        var ribbonColor = new SKColor(248, 205, 70);
+
+        using var boxPaint = new SKPaint { Color = boxColor, IsAntialias = true };
+        using var ribbonPaint = new SKPaint { Color = ribbonColor, IsAntialias = true };
+
+        canvas.DrawRoundRect(x - w / 2f, baseY - h, w, h, 3, 3, boxPaint);
+        // Kapak çıkıntısı
+        canvas.DrawRoundRect(x - w / 2f - 1.5f, baseY - h - 3, w + 3, 4.5f, 2, 2, boxPaint);
+        // Kurdele
+        canvas.DrawRect(x - 2f, baseY - h - 3, 4f, h + 3, ribbonPaint);
+        canvas.DrawRect(x - w / 2f, baseY - h * 0.55f, w, 3.5f, ribbonPaint);
+        // Fiyonk
+        canvas.DrawCircle(x - 3f, baseY - h - 5, 3f, ribbonPaint);
+        canvas.DrawCircle(x + 3f, baseY - h - 5, 3f, ribbonPaint);
+    }
+
+    private void DrawSnowplowTruck(SKCanvas canvas, SnowplowTruck truck, float time)
+    {
+        canvas.Save();
+        canvas.Translate(truck.X, truck.Y);
+
+        // Gövde (Sıcak İnşaat Sarısı)
+        using var bodyPaint = new SKPaint { Color = new SKColor(248, 192, 32), IsAntialias = true };
+        using var darkTrim = new SKPaint { Color = new SKColor(42, 46, 54), IsAntialias = true };
+        using var cabWindow = new SKPaint { Color = new SKColor(175, 220, 250), IsAntialias = true };
+
+        // Arka kasa ve ön kabin
+        canvas.DrawRoundRect(-38, -28, 44, 18, 3, 3, bodyPaint);
+        canvas.DrawRoundRect(4, -36, 26, 26, 5, 5, bodyPaint);
+        // Kabin camı
+        canvas.DrawRoundRect(12, -32, 14, 12, 2.5f, 2.5f, cabWindow);
+
+        // Ön kar küreme kepçesi (Plow Blade)
+        using var bladePaint = new SKPaint { Color = new SKColor(225, 115, 25), IsAntialias = true };
+        using var bladePath = new SKPath();
+        bladePath.MoveTo(30, -18);
+        bladePath.QuadTo(46, -12, 44, 0);
+        bladePath.LineTo(34, 0);
+        bladePath.LineTo(28, -14);
+        bladePath.Close();
+        canvas.DrawPath(bladePath, bladePaint);
+        canvas.DrawLine(26, -12, 35, -8, darkTrim);
+
+        // Tepe lambası (Yanıp sönen sıcak turuncu uyarı ışığı)
+        float beaconPulse = 0.5f + 0.5f * MathF.Sin(time * 14f);
+        using var beaconGlow = new SKPaint
+        {
+            Color = new SKColor(255, 140, 20, (byte)(beaconPulse * 200)),
+            MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, 6f),
+            IsAntialias = true
+        };
+        canvas.DrawCircle(15, -40, 8f, beaconGlow);
+        using var beaconCore = new SKPaint { Color = new SKColor(255, 165, 30), IsAntialias = true };
+        canvas.DrawRoundRect(12, -42, 6, 6, 2, 2, beaconCore);
+
+        // 4 adet dönen tekerlek (görseldeki gibi)
+        foreach (float wx in new[] { -28f, -13f, 2f, 18f })
+        {
+            canvas.DrawCircle(wx, -6, 6.5f, darkTrim);
+            canvas.DrawCircle(wx, -6, 3.0f, _snowPilePaint);
+        }
+
+        canvas.Restore();
     }
 
     private void DrawSantaAndReindeer(SKCanvas canvas, SantaSleigh santa)
@@ -338,17 +457,49 @@ public partial class OverlayWindow : Window
             canvas.DrawCircle(cx, cy, r, _snowOutlinePaint);
         }
 
+        // 1. Alt Gövde
         DrawShadedSphere(0, -23, 24);
 
+        // 2. Dal Kollar + Seçili Aksesuar (Broom, Candy Cane, Cocoa Mug, Mittens)
         canvas.DrawLine(-15 + sway * 0.5f, -58, -36 + sway * 0.4f, -68, _branchPaint);
         canvas.DrawLine(-30 + sway * 0.4f, -65, -35 + sway * 0.4f, -74, _branchPaint);
-        canvas.DrawLine(-32 + sway * 0.4f, -66, -40 + sway * 0.4f, -63, _branchPaint);
 
         float armWave = MathF.Sin(s.WobblePhase * 1.4f) * 3f;
-        canvas.DrawLine(15 + sway * 0.5f, -58, 36 + sway * 0.4f, -67 + armWave, _branchPaint);
-        canvas.DrawLine(30 + sway * 0.4f, -64 + armWave * 0.8f, 36 + sway * 0.4f, -73 + armWave, _branchPaint);
-        canvas.DrawLine(31 + sway * 0.4f, -65 + armWave * 0.8f, 40 + sway * 0.4f, -62 + armWave, _branchPaint);
+        float handX = 36 + sway * 0.4f;
+        float handY = -67 + armWave;
+        canvas.DrawLine(15 + sway * 0.5f, -58, handX, handY, _branchPaint);
 
+        if (s.Prop == SnowmanPropType.Mittens)
+        {
+            canvas.DrawCircle(-36 + sway * 0.4f, -68, 4.5f, _scarfMain);
+            canvas.DrawCircle(handX, handY, 4.5f, _scarfMain);
+        }
+        else if (s.Prop == SnowmanPropType.Broom)
+        {
+            canvas.DrawLine(handX, -2, handX + 4, -85, _branchPaint);
+            using var strawPaint = new SKPaint { Color = new SKColor(225, 185, 85), IsAntialias = true };
+            using var broomHead = new SKPath();
+            broomHead.MoveTo(handX - 1, -22);
+            broomHead.LineTo(handX - 9, 0);
+            broomHead.LineTo(handX + 8, 0);
+            broomHead.Close();
+            canvas.DrawPath(broomHead, strawPaint);
+        }
+        else if (s.Prop == SnowmanPropType.CandyCane)
+        {
+            using var canePaint = new SKPaint { Color = _scarfMain.Color, StrokeWidth = 3.5f, Style = SKPaintStyle.Stroke, StrokeCap = SKStrokeCap.Round, IsAntialias = true };
+            canvas.DrawLine(handX, -15, handX, -76, canePaint);
+            canvas.DrawArc(new SKRect(handX, -83, handX + 11, -71), 180, 180, false, canePaint);
+        }
+        else if (s.Prop == SnowmanPropType.CocoaMug)
+        {
+            canvas.DrawRoundRect(handX - 4, handY - 7, 9, 10, 2, 2, _scarfMain);
+            // Buhar çizgisi
+            using var steamPaint = new SKPaint { Color = new SKColor(255, 255, 255, 170), StrokeWidth = 1.4f, Style = SKPaintStyle.Stroke, IsAntialias = true };
+            canvas.DrawLine(handX, handY - 10, handX + MathF.Sin(time * 4f) * 2f, handY - 17, steamPaint);
+        }
+
+        // 3. Orta Gövde
         float midX = sway * 0.5f;
         DrawShadedSphere(midX, -56, 17.5f);
 
@@ -357,6 +508,7 @@ public partial class OverlayWindow : Window
             canvas.DrawCircle(midX, btnY, 2.3f, _coalPaint);
         }
 
+        // 4. Gövdeye Sarılı Yılbaşı Işıkları
         using var bodyLightPath = new SKPath();
         bodyLightPath.MoveTo(midX - 15, -62);
         bodyLightPath.QuadTo(midX, -52, midX + 16, -54);
@@ -371,30 +523,28 @@ public partial class OverlayWindow : Window
             (-6, -25), (8, -22), (19, -21)
         };
 
-        using var glowPaint = new SKPaint
-        {
-            IsAntialias = true,
-            MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, 4.0f)
-        };
+        using var glowPaint = new SKPaint { IsAntialias = true, MaskFilter = SKMaskFilter.CreateBlur(SKBlurStyle.Normal, 4.5f) };
         using var bulbPaint = new SKPaint { IsAntialias = true };
 
         for (int i = 0; i < lightPositions.Length; i++)
         {
             var (lx, ly) = lightPositions[i];
             var baseColor = BulbColors[i % BulbColors.Length];
-            float pulse = 0.6f + 0.4f * MathF.Sin(time * 4.2f + i * 1.3f + s.X * 0.05f);
+            float pulse = 0.65f + 0.35f * MathF.Sin(time * 4.2f + i * 1.3f + s.X * 0.05f);
 
-            glowPaint.Color = baseColor.WithAlpha((byte)(pulse * 150));
-            canvas.DrawCircle(lx, ly, 5.5f, glowPaint);
+            glowPaint.Color = baseColor.WithAlpha((byte)(pulse * 165));
+            canvas.DrawCircle(lx, ly, 6.0f, glowPaint);
 
             bulbPaint.Color = baseColor.WithAlpha((byte)(pulse * 255));
-            canvas.DrawCircle(lx, ly, 2.2f, bulbPaint);
+            canvas.DrawCircle(lx, ly, 2.3f, bulbPaint);
         }
 
+        // 5. Kafa
         float headX = sway;
         float headY = -82;
         DrawShadedSphere(headX, headY, 13.5f);
 
+        // 6. Kırmızı Atkı
         canvas.DrawRoundRect(new SKRect(headX - 13.5f, -72, headX + 13.5f, -65), 3.5f, 3.5f, _scarfMain);
         using var tailPath = new SKPath();
         tailPath.MoveTo(headX + 4, -67);
@@ -405,6 +555,7 @@ public partial class OverlayWindow : Window
         canvas.DrawPath(tailPath, _scarfMain);
         canvas.DrawLine(headX + 3 + sway * 1.1f, -53, headX + 8.5f + sway * 1.1f, -52.5f, _scarfStripe);
 
+        // 7. Gözler & Gülümseme
         canvas.DrawCircle(headX - 4.5f, headY - 3.5f, 2.0f, _coalPaint);
         canvas.DrawCircle(headX + 4.5f, headY - 3.5f, 2.0f, _coalPaint);
         for (int m = -2; m <= 2; m++)
@@ -412,6 +563,7 @@ public partial class OverlayWindow : Window
             canvas.DrawCircle(headX + m * 2.2f, headY + 5.2f - (m * m) * 0.35f, 1.0f, _coalPaint);
         }
 
+        // 8. Havuç Burun
         using var carrotPaint = new SKPaint { Color = new SKColor(245, 125, 25), IsAntialias = true };
         using var nosePath = new SKPath();
         nosePath.MoveTo(headX, headY - 1.5f);
@@ -420,19 +572,42 @@ public partial class OverlayWindow : Window
         nosePath.Close();
         canvas.DrawPath(nosePath, carrotPaint);
 
+        // 9. Seçili Şapka Tipi (Silindir Şapka / Noel Baba Şapkası / Bere)
         canvas.Save();
         canvas.Translate(headX + 1, headY - 13);
         canvas.RotateDegrees(6f);
-        canvas.DrawRoundRect(-16, -3, 32, 4.5f, 2, 2, _coalPaint);
-        canvas.DrawRoundRect(-10, -20, 20, 18, 2.5f, 2.5f, _coalPaint);
-        canvas.DrawRect(-10, -7, 20, 3.5f, _scarfMain);
-        using var hatSnow = new SKPath();
-        hatSnow.MoveTo(-10, -19);
-        hatSnow.QuadTo(0, -23, 10, -19);
-        hatSnow.QuadTo(3, -17, -10, -19);
-        canvas.DrawPath(hatSnow, _snowPilePaint);
-        canvas.Restore();
 
+        if (s.Hat == SnowmanHatType.SantaHat)
+        {
+            using var santaTri = new SKPath();
+            santaTri.MoveTo(-12, 0);
+            santaTri.LineTo(12, 0);
+            santaTri.QuadTo(4, -18, -10, -21);
+            santaTri.Close();
+            canvas.DrawPath(santaTri, _scarfMain);
+            canvas.DrawRoundRect(-13, -3, 26, 5, 2.5f, 2.5f, _snowPaint);
+            canvas.DrawCircle(-11, -21, 3.2f, _snowPaint);
+        }
+        else if (s.Hat == SnowmanHatType.Beanie)
+        {
+            using var greenBeanie = new SKPaint { Color = new SKColor(38, 145, 78), IsAntialias = true };
+            canvas.DrawArc(new SKRect(-12, -16, 12, 8), 180, 180, true, greenBeanie);
+            canvas.DrawRoundRect(-13, -3, 26, 4.5f, 2, 2, _scarfMain);
+            canvas.DrawCircle(0, -18, 3.5f, _snowPaint);
+        }
+        else
+        {
+            canvas.DrawRoundRect(-16, -3, 32, 4.5f, 2, 2, _coalPaint);
+            canvas.DrawRoundRect(-10, -20, 20, 18, 2.5f, 2.5f, _coalPaint);
+            canvas.DrawRect(-10, -7, 20, 3.5f, _scarfMain);
+            using var hatSnow = new SKPath();
+            hatSnow.MoveTo(-10, -19);
+            hatSnow.QuadTo(0, -23, 10, -19);
+            hatSnow.QuadTo(3, -17, -10, -19);
+            canvas.DrawPath(hatSnow, _snowPilePaint);
+        }
+
+        canvas.Restore();
         canvas.Restore();
     }
 
