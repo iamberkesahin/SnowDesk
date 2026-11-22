@@ -4,73 +4,97 @@ namespace SnowDesk.Models;
 
 public class WindowSurface
 {
-    public IntPtr Handle { get; }
-    public Win32Interop.RECT Bounds { get; set; }
+    public const int BucketSize = 4;
+    public const float MaxSnowDepth = 26f;
+
+    public IntPtr Hwnd { get; }
+    public Win32Interop.RECT Bounds { get; private set; }
     public float[] SnowHeights { get; private set; }
     public float[] OrganicMultiplier { get; private set; }
+    public float[] IcicleLengths { get; private set; }
     public List<float> TreeOffsetsX { get; } = new();
-    public float NoiseSeed { get; }
 
-    public const int BucketSize = 4;
-    public const float MaxSnowDepth = 34f;
+    private float _shakeEnergy;
+    private int _lastDirX;
 
-    public WindowSurface(IntPtr handle, Win32Interop.RECT bounds)
+    public WindowSurface(IntPtr hwnd, Win32Interop.RECT bounds)
     {
-        Handle = handle;
+        Hwnd = hwnd;
         Bounds = bounds;
-        NoiseSeed = (float)(Random.Shared.NextDouble() * 100.0);
         int buckets = Math.Max(1, bounds.Width / BucketSize);
         SnowHeights = new float[buckets];
         OrganicMultiplier = new float[buckets];
-        RebuildOrganicProfile();
+        IcicleLengths = new float[buckets];
+        GenerateOrganicProfile(buckets);
     }
 
-    private void RebuildOrganicProfile()
+    private void GenerateOrganicProfile(int buckets)
     {
-        int len = OrganicMultiplier.Length;
-        for (int i = 0; i < len; i++)
+        var rng = new Random(Hwnd.GetHashCode());
+        float p1 = (float)(rng.NextDouble() * Math.PI * 2);
+        float p2 = (float)(rng.NextDouble() * Math.PI * 2);
+
+        for (int i = 0; i < buckets; i++)
         {
-            float norm = (float)i / Math.Max(1, len - 1);
-            // Kenarlara doğru incelen, ortalarda organik tepecikler oluşturan profil
-            float edgeTaper = MathF.Sin(norm * MathF.PI);
-            float wave1 = MathF.Sin(i * 0.14f + NoiseSeed) * 0.45f;
-            float wave2 = MathF.Cos(i * 0.37f + NoiseSeed * 1.7f) * 0.25f;
-            OrganicMultiplier[i] = Math.Clamp((0.55f + wave1 + wave2) * (0.35f + 0.65f * edgeTaper), 0.15f, 1.55f);
+            float edge = MathF.Sin((float)i / Math.Max(1, buckets - 1) * MathF.PI);
+            float wave = 0.65f + 0.35f * MathF.Sin(i * 0.14f + p1) + 0.25f * MathF.Cos(i * 0.31f + p2);
+            OrganicMultiplier[i] = Math.Clamp(edge * wave * 1.35f, 0.08f, 1.45f);
         }
     }
 
-    public void UpdateBounds(Win32Interop.RECT newBounds, out float movementDelta)
+    public void UpdateBounds(Win32Interop.RECT newBounds, out float moveDelta, out bool isShaken)
     {
-        float dx = Math.Abs(newBounds.Left - Bounds.Left);
-        float dy = Math.Abs(newBounds.Top - Bounds.Top);
-        movementDelta = dx + dy;
+        int dx = newBounds.Left - Bounds.Left;
+        int dy = newBounds.Top - Bounds.Top;
+        moveDelta = MathF.Sqrt(dx * dx + dy * dy);
+
+        // Sağ-sol hızlı yön değişimi (Pencere Sallama) tespiti
+        int dirX = Math.Sign(dx);
+        if (dirX != 0 && dirX != _lastDirX && Math.Abs(dx) > 6)
+        {
+            _shakeEnergy += 1.0f;
+        }
+        _lastDirX = dirX;
+        _shakeEnergy = Math.Max(0f, _shakeEnergy - 0.08f);
+        isShaken = _shakeEnergy >= 2.2f;
+        if (isShaken) _shakeEnergy = 0f;
 
         if (newBounds.Width != Bounds.Width)
         {
             int newBuckets = Math.Max(1, newBounds.Width / BucketSize);
-            var resized = new float[newBuckets];
-            Array.Copy(SnowHeights, resized, Math.Min(SnowHeights.Length, newBuckets));
-            SnowHeights = resized;
+            var resizedSnow = new float[newBuckets];
+            var resizedIcicles = new float[newBuckets];
+            Array.Copy(SnowHeights, resizedSnow, Math.Min(SnowHeights.Length, newBuckets));
+            Array.Copy(IcicleLengths, resizedIcicles, Math.Min(IcicleLengths.Length, newBuckets));
+            SnowHeights = resizedSnow;
+            IcicleLengths = resizedIcicles;
             OrganicMultiplier = new float[newBuckets];
-            RebuildOrganicProfile();
+            GenerateOrganicProfile(newBuckets);
         }
 
         Bounds = newBounds;
     }
 
-    public void SmoothSnow()
+    public void GrowIcicles(float dt)
     {
-        for (int i = 1; i < SnowHeights.Length - 1; i++)
+        for (int i = 2; i < IcicleLengths.Length - 2; i += 4)
         {
-            SnowHeights[i] = (SnowHeights[i - 1] + SnowHeights[i] * 2.2f + SnowHeights[i + 1]) / 4.2f;
+            if (SnowHeights[i] > 4f && IcicleLengths[i] < 24f * OrganicMultiplier[i])
+            {
+                IcicleLengths[i] += dt * 0.85f * OrganicMultiplier[i];
+            }
         }
     }
 
-    public void ShedSnow(float ratio)
+    public void ShedSnow(float amount)
     {
         for (int i = 0; i < SnowHeights.Length; i++)
-        {
-            SnowHeights[i] = Math.Max(0, SnowHeights[i] - ratio);
-        }
+            SnowHeights[i] = Math.Max(0f, SnowHeights[i] - amount);
+    }
+
+    public void SmoothSnow()
+    {
+        for (int i = 1; i < SnowHeights.Length - 1; i++)
+            SnowHeights[i] = (SnowHeights[i - 1] + SnowHeights[i] * 2f + SnowHeights[i + 1]) / 4f;
     }
 }

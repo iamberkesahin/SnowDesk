@@ -1,137 +1,136 @@
-using System.Runtime.InteropServices;
+﻿using System.Runtime.InteropServices;
 using System.Text;
 
 namespace SnowDesk.Native;
 
 public static class Win32Interop
 {
-    public const int GWL_EXSTYLE = -20;
-    public const int WS_EX_TRANSPARENT = 0x00000020;
-    public const int WS_EX_TOOLWINDOW = 0x00000080;
-    public const int WS_EX_NOACTIVATE = 0x08000000;
-
-    private const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
-    private const int DWMWA_CLOAKED = 14;
+    [StructLayout(LayoutKind.Sequential)]
+    public struct RECT { public int Left, Top, Right, Bottom; public int Width => Right - Left; public int Height => Bottom - Top; }
 
     [StructLayout(LayoutKind.Sequential)]
-    public struct RECT
-    {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
-
-        public int Width => Right - Left;
-        public int Height => Bottom - Top;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct POINT
-    {
-        public int X;
-        public int Y;
-    }
+    public struct POINT { public int X, Y; }
 
     public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
-    [DllImport("user32.dll")]
-    public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+    private static readonly IntPtr HWND_TOPMOST = new(-1);
+    private const uint SWP_NOMOVE = 0x0002;
+    private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOACTIVATE = 0x0010;
+    private const uint SWP_SHOWWINDOW = 0x0040;
+    private const uint SWP_FRAMECHANGED = 0x0020;
 
-    [DllImport("user32.dll")]
-    public static extern bool IsWindowVisible(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT lpPoint);
+    [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
+    [DllImport("user32.dll")] public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
+    [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+    [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out int pvAttribute, int cbAttribute);
+    [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
 
-    [DllImport("user32.dll")]
-    public static extern bool IsIconic(IntPtr hWnd);
-
-    [DllImport("user32.dll")]
-    public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
-
-    [DllImport("user32.dll")]
-    public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
-
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
-
-    [DllImport("user32.dll")]
-    public static extern bool GetCursorPos(out POINT lpPoint);
-
-    [DllImport("dwmapi.dll")]
-    public static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out RECT pvAttribute, int cbAttribute);
-
-    [DllImport("dwmapi.dll")]
-    public static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, out int pvAttribute, int cbAttribute);
+    private const int GWL_STYLE = -16;
+    private const int GWL_EXSTYLE = -20;
+    private const int WS_CAPTION = 0x00C00000;
+    private const int WS_THICKFRAME = 0x00040000;
+    private const int WS_EX_TRANSPARENT = 0x00000020;
+    private const int WS_EX_TOOLWINDOW = 0x00000080;
+    private const int WS_EX_NOACTIVATE = 0x08000000;
+    private const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+    private const int DWMWA_CLOAKED = 14;
 
     public static void MakeWindowClickThrough(IntPtr hwnd)
     {
-        int extendedStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
-        SetWindowLong(hwnd, GWL_EXSTYLE, extendedStyle | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
+        int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
+        SetWindowLong(hwnd, GWL_EXSTYLE, exStyle | WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE);
+        EnsureAlwaysOnTop(hwnd);
     }
 
-    public static List<(IntPtr Handle, RECT Bounds)> GetVisibleWindows(IntPtr ignoreHwnd)
+    public static void EnsureAlwaysOnTop(IntPtr hwnd)
     {
-        var windows = new List<(IntPtr, RECT)>();
+        if (hwnd == IntPtr.Zero) return;
+        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    }
 
-        EnumWindows((hWnd, lParam) =>
+    public static bool IsForegroundFullscreen(IntPtr overlayHwnd, int screenWidth, int screenHeight)
+    {
+        IntPtr fg = GetForegroundWindow();
+        if (fg == IntPtr.Zero || fg == overlayHwnd) return false;
+
+        var sb = new StringBuilder(64);
+        GetClassName(fg, sb, sb.Capacity);
+        string cls = sb.ToString();
+        if (cls is "Progman" or "WorkerW" or "Shell_TrayWnd") return false;
+
+        if (DwmGetWindowAttribute(fg, DWMWA_EXTENDED_FRAME_BOUNDS, out RECT r, Marshal.SizeOf<RECT>()) == 0)
         {
-            if (hWnd == ignoreHwnd || !IsWindowVisible(hWnd) || IsIconic(hWnd))
+            return r.Width >= screenWidth && r.Height >= screenHeight;
+        }
+        return false;
+    }
+
+    public static void ForceGameOverlayCompatibility(IntPtr overlayHwnd, int screenWidth, int screenHeight)
+    {
+        IntPtr fg = GetForegroundWindow();
+        if (fg == IntPtr.Zero || fg == overlayHwnd) return;
+
+        var sb = new StringBuilder(64);
+        GetClassName(fg, sb, sb.Capacity);
+        string cls = sb.ToString();
+        if (cls is "Progman" or "WorkerW" or "Shell_TrayWnd") return;
+
+        if (DwmGetWindowAttribute(fg, DWMWA_EXTENDED_FRAME_BOUNDS, out RECT r, Marshal.SizeOf<RECT>()) == 0)
+        {
+            if (r.Width >= screenWidth && r.Height >= screenHeight)
+            {
+                int style = GetWindowLong(fg, GWL_STYLE);
+                if ((style & WS_CAPTION) != 0 || (style & WS_THICKFRAME) != 0)
+                {
+                    SetWindowLong(fg, GWL_STYLE, style & ~(WS_CAPTION | WS_THICKFRAME));
+                    SetWindowPos(fg, IntPtr.Zero, 0, 0, screenWidth, screenHeight, SWP_NOACTIVATE | SWP_FRAMECHANGED);
+                }
+            }
+        }
+        EnsureAlwaysOnTop(overlayHwnd);
+    }
+
+    public static List<(IntPtr Hwnd, RECT Bounds)> GetVisibleWindows(IntPtr overlayHwnd)
+    {
+        var results = new List<(IntPtr, RECT)>();
+        var sb = new StringBuilder(64);
+
+        EnumWindows((hwnd, _) =>
+        {
+            if (hwnd == overlayHwnd || !IsWindowVisible(hwnd) || IsIconic(hwnd))
                 return true;
 
-            if (DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, out int cloaked, sizeof(int)) == 0 && cloaked != 0)
+            if (DwmGetWindowAttribute(hwnd, DWMWA_CLOAKED, out int cloaked, sizeof(int)) == 0 && cloaked != 0)
                 return true;
 
-            int exStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
+            int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
             if ((exStyle & WS_EX_TOOLWINDOW) != 0)
                 return true;
 
-            var sb = new StringBuilder(256);
-            GetWindowText(hWnd, sb, sb.Capacity);
-            string title = sb.ToString();
-
-            if (string.IsNullOrWhiteSpace(title) ||
-                title == "Program Manager" ||
-                title == "Windows Input Experience" ||
-                title == "Settings")
+            sb.Clear();
+            GetClassName(hwnd, sb, sb.Capacity);
+            string cls = sb.ToString();
+            if (cls is "Progman" or "WorkerW" or "Shell_TrayWnd" or "Windows.UI.Core.CoreWindow")
                 return true;
 
-            if (DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, out RECT rect, Marshal.SizeOf<RECT>()) == 0)
+            if (DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out RECT rect, Marshal.SizeOf<RECT>()) == 0)
             {
-                // Tam ekran olmayan veya ekranın üstünden biraz boşluğu olan tüm pencereleri yakala
-                if (rect.Width > 150 && rect.Height > 80 && rect.Top >= -10 && rect.Top < 1200)
+                // Tam ekran oyun pencerelerinin ortasına ışık/kar biriktirme (sadece normal pencerelere biriktir)
+                if (rect.Width > 140 && rect.Height > 80 && rect.Top > 12 && rect.Left > -2000)
                 {
-                    // Tam ekran kaplayan pencereleri (Top <= 0 ve Height >= 1000) masaüstü gibi görüp kar biriktirme,
-                    // ama pencere modundaki tüm sekmelerin/uygulamaların üstüne kar yağsın!
-                    if (rect.Top > 8)
-                    {
-                        windows.Add((hWnd, rect));
-                    }
+                    results.Add((hwnd, rect));
                 }
             }
-
             return true;
         }, IntPtr.Zero);
 
-        return windows;
-    }
-    [DllImport("user32.dll")]
-    private static extern IntPtr GetForegroundWindow();
-
-    [DllImport("user32.dll")]
-    private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
-
-    public static bool IsForegroundFullscreen(IntPtr ignoreHwnd, int screenWidth, int screenHeight)
-    {
-        IntPtr fg = GetForegroundWindow();
-        if (fg == IntPtr.Zero || fg == ignoreHwnd) return false;
-
-        var sb = new StringBuilder(256);
-        GetWindowText(fg, sb, sb.Capacity);
-        string title = sb.ToString();
-        if (title == "Program Manager" || string.IsNullOrWhiteSpace(title)) return false;
-
-        if (GetWindowRect(fg, out RECT r))
-        {
-            return r.Left <= 0 && r.Top <= 0 && r.Width >= screenWidth && r.Height >= screenHeight;
-        }
-        return false;
+        return results;
     }
 }

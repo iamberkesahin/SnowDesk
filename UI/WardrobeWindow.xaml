@@ -1,0 +1,39 @@
+﻿<Window x:Class="SnowDesk.UI.WardrobeWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Snowman Wardrobe"
+        Width="380" Height="340"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize"
+        WindowStyle="ToolWindow"
+        Background="#1C2230" Foreground="White">
+    <StackPanel Margin="18">
+        <TextBlock Text="❄️ Fashion week, but colder." FontSize="17" FontWeight="SemiBold" Margin="0,0,0,14"/>
+
+        <TextBlock Text="Şapka Seçimi" Foreground="#9FB3D1" FontSize="12" Margin="0,0,0,6"/>
+        <UniformGrid Columns="4" Margin="0,0,0,14">
+            <Button Content="🎩 Silindir" Click="Hat_Click" Tag="TopHat" Margin="3" Padding="6" Background="#2A3346" Foreground="White" BorderThickness="0"/>
+            <Button Content="🎅 Noel" Click="Hat_Click" Tag="SantaHat" Margin="3" Padding="6" Background="#2A3346" Foreground="White" BorderThickness="0"/>
+            <Button Content="🧶 Bere" Click="Hat_Click" Tag="Beanie" Margin="3" Padding="6" Background="#2A3346" Foreground="White" BorderThickness="0"/>
+            <Button Content="🎧 Kulaklık" Click="Hat_Click" Tag="Earmuffs" Margin="3" Padding="6" Background="#2A3346" Foreground="White" BorderThickness="0"/>
+        </UniformGrid>
+
+        <TextBlock Text="El Aksesuarı" Foreground="#9FB3D1" FontSize="12" Margin="0,0,0,6"/>
+        <UniformGrid Columns="3" Margin="0,0,0,14">
+            <Button Content="🌿 Dal Kollar" Click="Prop_Click" Tag="Sticks" Margin="3" Padding="6" Background="#2A3346" Foreground="White" BorderThickness="0"/>
+            <Button Content="🧹 Süpürge" Click="Prop_Click" Tag="Broom" Margin="3" Padding="6" Background="#2A3346" Foreground="White" BorderThickness="0"/>
+            <Button Content="🍬 Baston" Click="Prop_Click" Tag="CandyCane" Margin="3" Padding="6" Background="#2A3346" Foreground="White" BorderThickness="0"/>
+            <Button Content="☕ Kakao" Click="Prop_Click" Tag="CocoaMug" Margin="3" Padding="6" Background="#2A3346" Foreground="White" BorderThickness="0"/>
+            <Button Content="🧤 Eldiven" Click="Prop_Click" Tag="Mittens" Margin="3" Padding="6" Background="#2A3346" Foreground="White" BorderThickness="0"/>
+            <Button Content="🎁 Hediye" Click="Prop_Click" Tag="Gift" Margin="3" Padding="6" Background="#2A3346" Foreground="White" BorderThickness="0"/>
+        </UniformGrid>
+
+        <TextBlock Text="Atkı Rengi" Foreground="#9FB3D1" FontSize="12" Margin="0,0,0,6"/>
+        <UniformGrid Columns="4">
+            <Button Content="🔴 Kırmızı" Click="Scarf_Click" Tag="ClassicRed" Margin="3" Padding="6" Background="#2A3346" Foreground="White" BorderThickness="0"/>
+            <Button Content="🟢 Yeşil" Click="Scarf_Click" Tag="EmeraldGreen" Margin="3" Padding="6" Background="#2A3346" Foreground="White" BorderThickness="0"/>
+            <Button Content="🟡 Altın" Click="Scarf_Click" Tag="RoyalGold" Margin="3" Padding="6" Background="#2A3346" Foreground="White" BorderThickness="0"/>
+            <Button Content="🔵 Buz" Click="Scarf_Click" Tag="FrostBlue" Margin="3" Padding="6" Background="#2A3346" Foreground="White" BorderThickness="0"/>
+        </UniformGrid>
+    </StackPanel>
+</Window>
