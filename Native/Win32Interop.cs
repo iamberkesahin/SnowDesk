@@ -42,6 +42,11 @@ public static class Win32Interop
     private const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
     private const int DWMWA_CLOAKED = 14;
 
+    private static bool IsSystemOverlayOrSnipping(string cls) =>
+        cls is "Progman" or "WorkerW" or "Shell_TrayWnd" or "Windows.UI.Core.CoreWindow"
+            or "ScreenClippingHost" or "Microsoft-Windows-SnipperToolbar" or "XamlExplorerHostIslandWindow"
+            or "ForegroundStaging" or "MultitaskingViewFrame";
+
     public static void MakeWindowClickThrough(IntPtr hwnd)
     {
         int exStyle = GetWindowLong(hwnd, GWL_EXSTYLE);
@@ -62,13 +67,11 @@ public static class Win32Interop
 
         var sb = new StringBuilder(64);
         GetClassName(fg, sb, sb.Capacity);
-        string cls = sb.ToString();
-        if (cls is "Progman" or "WorkerW" or "Shell_TrayWnd") return false;
+        if (IsSystemOverlayOrSnipping(sb.ToString())) return false;
 
         if (DwmGetWindowAttribute(fg, DWMWA_EXTENDED_FRAME_BOUNDS, out RECT r, Marshal.SizeOf<RECT>()) == 0)
-        {
             return r.Width >= screenWidth && r.Height >= screenHeight;
-        }
+
         return false;
     }
 
@@ -80,7 +83,9 @@ public static class Win32Interop
         var sb = new StringBuilder(64);
         GetClassName(fg, sb, sb.Capacity);
         string cls = sb.ToString();
-        if (cls is "Progman" or "WorkerW" or "Shell_TrayWnd") return;
+
+        // Win+Shift+S Ekran Alıntısı aracı aktifken overlay müdahalesini durdur!
+        if (IsSystemOverlayOrSnipping(cls)) return;
 
         if (DwmGetWindowAttribute(fg, DWMWA_EXTENDED_FRAME_BOUNDS, out RECT r, Marshal.SizeOf<RECT>()) == 0)
         {
@@ -116,17 +121,13 @@ public static class Win32Interop
 
             sb.Clear();
             GetClassName(hwnd, sb, sb.Capacity);
-            string cls = sb.ToString();
-            if (cls is "Progman" or "WorkerW" or "Shell_TrayWnd" or "Windows.UI.Core.CoreWindow")
+            if (IsSystemOverlayOrSnipping(sb.ToString()))
                 return true;
 
             if (DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out RECT rect, Marshal.SizeOf<RECT>()) == 0)
             {
-                // Tam ekran oyun pencerelerinin ortasına ışık/kar biriktirme (sadece normal pencerelere biriktir)
                 if (rect.Width > 140 && rect.Height > 80 && rect.Top > 12 && rect.Left > -2000)
-                {
                     results.Add((hwnd, rect));
-                }
             }
             return true;
         }, IntPtr.Zero);
