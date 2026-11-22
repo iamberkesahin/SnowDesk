@@ -272,7 +272,7 @@ public partial class OverlayWindow : Window
         }
 
         canvas.Save();
-        canvas.Translate(santa.X, santa.Y);
+        canvas.Translate(santa.X, santa.Y); canvas.Scale(santa.Direction, 1);
 
         using var reinPaint = new SKPaint { Color = new SKColor(220, 185, 110, 200), StrokeWidth = 1.3f, IsAntialias = true };
         canvas.DrawLine(15, -4, 78, -6, reinPaint);
@@ -566,3 +566,4 @@ public partial class OverlayWindow : Window
         }
     }
 }
+

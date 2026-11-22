@@ -129,9 +129,10 @@ public class SnowPhysicsEngine
     public void TriggerSantaFlyby()
     {
         Santa.IsActive = true;
-        Santa.X = -160f;
-        Santa.Y = Math.Clamp(ScreenHeight * 0.14f, 80f, 180f);
-        Santa.SpeedX = 165f;
+        Santa.Direction = _rng.Next(2) == 0 ? 1 : -1;
+        Santa.X = Santa.Direction == 1 ? -160f : ScreenWidth + 160f;
+        Santa.Y = Math.Clamp(ScreenHeight * (float)(_rng.NextDouble() * 0.14 + 0.08), 70f, 200f);
+        Santa.SpeedX = 185f * Santa.Direction;
         Santa.WavePhase = 0f;
         Santa.Trail.Clear();
     }
@@ -481,7 +482,7 @@ public class SnowPhysicsEngine
         if (!Santa.IsActive)
         {
             _santaTimer -= dt;
-            if (_santaTimer <= 0f) { TriggerSantaFlyby(); _santaTimer = _rng.Next(65, 130); }
+            if (_santaTimer <= 0f) { TriggerSantaFlyby(); _santaTimer = _rng.Next(20, 40); }
             return;
         }
 
@@ -490,17 +491,22 @@ public class SnowPhysicsEngine
         Santa.Y += MathF.Sin(Santa.WavePhase) * 14f * dt;
 
         for (int i = 0; i < 2; i++)
-            Santa.Trail.Add((Santa.X - 35f + (float)(_rng.NextDouble() * 14 - 7), Santa.Y + (float)(_rng.NextDouble() * 12 - 6), 1.0f, 2.2f));
+            Santa.Trail.Add((Santa.X - (35f * Santa.Direction) + (float)(_rng.NextDouble() * 14 - 7), Santa.Y + (float)(_rng.NextDouble() * 12 - 6), 1.0f, 2.2f));
 
         for (int i = Santa.Trail.Count - 1; i >= 0; i--)
         {
             var p = Santa.Trail[i];
             float nextAlpha = p.Alpha - dt * 0.85f;
             if (nextAlpha <= 0f) Santa.Trail.RemoveAt(i);
-            else Santa.Trail[i] = (p.X - 15f * dt, p.Y + 8f * dt, nextAlpha, p.Size);
+            else Santa.Trail[i] = (p.X - (15f * Santa.Direction) * dt, p.Y + 8f * dt, nextAlpha, p.Size);
         }
 
-        if (Santa.X > ScreenWidth + 240f) { Santa.IsActive = false; Santa.Trail.Clear(); }
+        if ((Santa.Direction == 1 && Santa.X > ScreenWidth + 240f) ||
+            (Santa.Direction == -1 && Santa.X < -240f))
+        {
+            Santa.IsActive = false;
+            Santa.Trail.Clear();
+        }
     }
 
     private void UpdateThrownSnowballs(float dt)
@@ -740,4 +746,5 @@ public class SnowPhysicsEngine
         });
     }
 }
+
 
