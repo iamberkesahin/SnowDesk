@@ -339,7 +339,10 @@ public class SnowPhysicsEngine
 
             if (landed || flake.Y > ScreenHeight)
             {
-                if (_flakes.Count > Settings.TargetFlakeCount) _flakes.RemoveAt(idxFlake);
+                if (_flakes.Count > Settings.TargetFlakeCount && _rng.NextDouble() < 0.65)
+                {
+                    _flakes.RemoveAt(idxFlake);
+                }
                 else
                 {
                     var reset = CreateFlake(randomY: false);
@@ -737,3 +740,4 @@ public class SnowPhysicsEngine
         });
     }
 }
+
