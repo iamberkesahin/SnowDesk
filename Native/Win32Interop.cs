@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices;
+﻿using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace SnowDesk.Native;
@@ -24,6 +25,7 @@ public static class Win32Interop
     [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
     [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT lpPoint);
     [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr hWnd, int nIndex);
     [DllImport("user32.dll")] public static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
@@ -42,10 +44,23 @@ public static class Win32Interop
     private const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
     private const int DWMWA_CLOAKED = 14;
 
-    private static bool IsSystemOverlayOrSnipping(string cls) =>
-        cls is "Progman" or "WorkerW" or "Shell_TrayWnd" or "Windows.UI.Core.CoreWindow"
-            or "ScreenClippingHost" or "Microsoft-Windows-SnipperToolbar" or "XamlExplorerHostIslandWindow"
-            or "ForegroundStaging" or "MultitaskingViewFrame";
+    private static bool IsProtectedSystemProcess(IntPtr hwnd)
+    {
+        try
+        {
+            GetWindowThreadProcessId(hwnd, out uint pid);
+            if (pid == 0) return true;
+            using var proc = Process.GetProcessById((int)pid);
+            string name = proc.ProcessName.ToLowerInvariant();
+            return name is "snippingtool" or "screenclippinghost" or "explorer"
+                or "shellexperiencehost" or "searchhost" or "startmenuexperiencehost"
+                or "textinputhost" or "lockapp" or "dwm";
+        }
+        catch
+        {
+            return true;
+        }
+    }
 
     public static void MakeWindowClickThrough(IntPtr hwnd)
     {
@@ -63,11 +78,7 @@ public static class Win32Interop
     public static bool IsForegroundFullscreen(IntPtr overlayHwnd, int screenWidth, int screenHeight)
     {
         IntPtr fg = GetForegroundWindow();
-        if (fg == IntPtr.Zero || fg == overlayHwnd) return false;
-
-        var sb = new StringBuilder(64);
-        GetClassName(fg, sb, sb.Capacity);
-        if (IsSystemOverlayOrSnipping(sb.ToString())) return false;
+        if (fg == IntPtr.Zero || fg == overlayHwnd || IsProtectedSystemProcess(fg)) return false;
 
         if (DwmGetWindowAttribute(fg, DWMWA_EXTENDED_FRAME_BOUNDS, out RECT r, Marshal.SizeOf<RECT>()) == 0)
             return r.Width >= screenWidth && r.Height >= screenHeight;
@@ -80,12 +91,8 @@ public static class Win32Interop
         IntPtr fg = GetForegroundWindow();
         if (fg == IntPtr.Zero || fg == overlayHwnd) return;
 
-        var sb = new StringBuilder(64);
-        GetClassName(fg, sb, sb.Capacity);
-        string cls = sb.ToString();
-
-        // Win+Shift+S Ekran Alıntısı aracı aktifken overlay müdahalesini durdur!
-        if (IsSystemOverlayOrSnipping(cls)) return;
+        // Win+Shift+S (SnippingTool) veya sistem araçları aktifken hiçbir pencereye dokunma
+        if (IsProtectedSystemProcess(fg)) return;
 
         if (DwmGetWindowAttribute(fg, DWMWA_EXTENDED_FRAME_BOUNDS, out RECT r, Marshal.SizeOf<RECT>()) == 0)
         {
@@ -121,7 +128,9 @@ public static class Win32Interop
 
             sb.Clear();
             GetClassName(hwnd, sb, sb.Capacity);
-            if (IsSystemOverlayOrSnipping(sb.ToString()))
+            string cls = sb.ToString();
+            if (cls is "Progman" or "WorkerW" or "Shell_TrayWnd" or "Windows.UI.Core.CoreWindow"
+                or "ScreenClippingHost" or "Microsoft-Windows-SnipperToolbar")
                 return true;
 
             if (DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out RECT rect, Marshal.SizeOf<RECT>()) == 0)
