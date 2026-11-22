@@ -94,7 +94,6 @@ public class SnowPhysicsEngine
             _cookies.Add(new GingerbreadMan { X = ScreenWidth - 165f, BaseY = GroundY, Scale = 0.95f, WavePhase = 0f });
             _cookies.Add(new GingerbreadMan { X = ScreenWidth - 220f, BaseY = GroundY, Scale = 0.80f, WavePhase = 1.8f });
 
-            // Sıcak atmosfer için hediye paketleri
             _giftBoxes.Add((ScreenWidth - 265f, 22f, 20f, 0));
             _giftBoxes.Add((ScreenWidth - 285f, 16f, 14f, 1));
             _giftBoxes.Add((75f, 24f, 22f, 0));
@@ -170,10 +169,10 @@ public class SnowPhysicsEngine
                     X = wx,
                     Y = wy,
                     Radius = Math.Clamp(h * 0.25f, 2.2f, 5.5f),
-                    DriftPhase = (float)(_rng.NextDouble() * 40 - 20), // Hafif yatay savrulma
-                    SpeedY = (float)(_rng.NextDouble() * 60 + 20),     // Aşağı düşüş
+                    DriftPhase = (float)(_rng.NextDouble() * 40 - 20),
+                    SpeedY = (float)(_rng.NextDouble() * 60 + 20),
                     Opacity = 1.0f,
-                    DriftSpeed = 1f // 1f = Yere değince zemindeki karı arttırsın!
+                    DriftSpeed = 1f
                 });
             }
         }
@@ -227,7 +226,6 @@ public class SnowPhysicsEngine
             }
         }
 
-        // Küçültülen (Minimize) veya kapatılan pencerelerin üstündeki karları AŞAĞI DÖK!
         var removed = _surfaces.Keys.Where(k => !activeHandles.Contains(k)).ToList();
         foreach (var key in removed)
         {
@@ -245,6 +243,17 @@ public class SnowPhysicsEngine
 
         UpdateSanta(dt);
         UpdateSnowplow(dt);
+
+        // OTOMATİK KAR KÜREME TETİKLEYİCİSİ:
+        // Ortalama kar kalınlığı kardan adamın bel hizasına (~42px) ulaşınca kamyon otomatik gelir!
+        if (!PlowTruck.IsActive && _activeSnowball == null && _floorSnow.Length > 0)
+        {
+            float avgSnow = _floorSnow.Average();
+            if (avgSnow >= 42f)
+            {
+                StartSnowplowClear();
+            }
+        }
 
         if (_flakes.Count < Settings.TargetFlakeCount)
         {
@@ -367,16 +376,13 @@ public class SnowPhysicsEngine
         PlowTruck.X += PlowTruck.SpeedX * dt;
         PlowTruck.WheelAngle += dt * 10f;
 
-        // Kamyonun önündeki kepçe ucu (PlowTruck.X + 42)
         float bladeX = PlowTruck.X + 42f;
         int bladeBucket = Math.Clamp((int)(bladeX / WindowSurface.BucketSize), 0, _floorSnow.Length - 1);
 
-        // Geçtiği yerdeki karı temizle ve önüne küçük bir kar dalgası it
         for (int i = Math.Max(0, bladeBucket - 12); i <= bladeBucket; i++)
         {
             if (_floorSnow[i] > 0.5f)
             {
-                // Kepçe ucundan kar sıçrat
                 if (_rng.NextDouble() < 0.35)
                 {
                     _splatParticles.Add(new Snowflake
@@ -393,10 +399,8 @@ public class SnowPhysicsEngine
             }
         }
 
-        // Önündeki kartoplarını da temizle
         _snowballs.RemoveAll(b => !b.IsThrown && b.X <= bladeX + 12f);
 
-        // Pencerelerin üstündeki karları da eşzamanlı erit
         foreach (var s in _surfaces.Values)
         {
             s.ShedSnow(dt * 14f);
@@ -438,13 +442,11 @@ public class SnowPhysicsEngine
             p.X += p.DriftPhase * dt;
             p.Y += p.SpeedY * dt;
 
-            // Pencereden dökülen kar parçasıysa (DriftSpeed == 1f) şeffaflaşmasın, yere inene kadar düşsün
             if (p.DriftSpeed < 0.5f)
                 p.Opacity -= dt * 1.4f;
 
             if (p.Y >= GroundY)
             {
-                // Yere değen parçacık zemindeki kar yığınına eklensin!
                 int bucket = Math.Clamp((int)(p.X / WindowSurface.BucketSize), 0, _floorSnow.Length - 1);
                 for (int k = -2; k <= 2; k++)
                 {
