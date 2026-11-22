@@ -98,7 +98,7 @@ public partial class App : Application
 
         _trayIcon = new NotifyIcon
         {
-            Icon = SystemIcons.Application,
+            Icon = System.Drawing.Icon.ExtractAssociatedIcon(Environment.ProcessPath!) ?? SystemIcons.Application,
             Text = "SnowDesk - Masaüstü Kar Efekti",
             Visible = true,
             ContextMenuStrip = menu
